@@ -112,7 +112,7 @@ typedef enum {
  *
  *  This is called when audio for the channel is required. As this is called from Core Audio's
  *  realtime thread, you should not wait on locks, allocate memory, or call any Objective-C or BSD
- *  code from this callback.
+ *  code from this callback. 实时Callback, 不应该有等待，资源消耗型的Task
  *
  *  The channel object is passed through as a parameter.  You should not send it Objective-C
  *  messages, but if you implement the callback within your channel's \@implementation block, you 
@@ -121,21 +121,23 @@ typedef enum {
  * @param channel           The channel object
  * @param audioController   The Audio Controller
  * @param time              The time the buffer will be played, automatically compensated for hardware latency.
+                            自动补偿?
  * @param frames            The number of frames required
  * @param audio             The audio buffer list - audio should be copied into the provided buffers
  * @return A status code
  */
 typedef OSStatus (*AEAudioRenderCallback) (__unsafe_unretained id    channel,
                                            __unsafe_unretained AEAudioController *audioController,
-                                           const AudioTimeStamp     *time,
-                                           UInt32                    frames,
+                                           const AudioTimeStamp     *time,   // 时间
+                                           UInt32                    frames, // Audio数据
                                            AudioBufferList          *audio);
 
 typedef AEAudioRenderCallback AEAudioControllerRenderCallback; // Temporary alias
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*!
  * AEAudioPlayable protocol
- *
+ *  Channel相关的接口，解决数据来源的问题
  *  The interface that a channel object must implement - this includes 'renderCallback',
  *  which is a @link AEAudioRenderCallback C callback @endlink to be called when 
  *  audio is required.  The callback will be passed a reference to this object, so you should
@@ -225,6 +227,8 @@ typedef AEAudioRenderCallback AEAudioControllerRenderCallback; // Temporary alia
 @property (nonatomic, readonly) AudioStreamBasicDescription audioDescription;
 
 @end
+    
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 static void * const AEAudioSourceInput         = ((void*)0x01); //!< Main audio input
 static void * const AEAudioSourceMainOutput    = ((void*)0x02); //!< Main audio output
@@ -346,6 +350,7 @@ typedef AEAudioFilterProducer AEAudioControllerFilterProducer; // Temporary alia
  * @param audioController The Audio Controller
  * @param producer  A function pointer to be used to produce input audio
  * @param producerToken An opaque pointer to be passed to the producer as the first argument
+ 
  * @param time      The time the output audio will be played or the time input audio was received, automatically compensated for hardware latency.
  * @param frames    The length of the required audio, in frames
  * @param audio     The audio buffer list to write output audio to

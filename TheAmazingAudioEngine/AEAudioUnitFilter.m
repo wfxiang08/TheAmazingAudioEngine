@@ -24,14 +24,17 @@
 //
 
 #import "AEAudioUnitFilter.h"
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 @interface AEAudioUnitFilter () {
     AudioComponentDescription _componentDescription;
     AUGraph _audioGraph;
+    
     AUNode _node;
     AudioUnit _audioUnit;
+    
     AUNode _inConverterNode;
     AudioUnit _inConverterUnit;
+    
     AUNode _outConverterNode;
     AudioUnit _outConverterUnit;
     AEAudioFilterProducer _currentProducer;
@@ -42,6 +45,7 @@
 @property (nonatomic, strong) NSMutableDictionary * savedParameters;
 @end
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 @implementation AEAudioUnitFilter
 @synthesize audioGraphNode = _node;
 
@@ -63,14 +67,17 @@
     return self;
 }
 
+// 直接通过指针访问
 AudioUnit AEAudioUnitFilterGetAudioUnit(__unsafe_unretained AEAudioUnitFilter * filter) {
     return filter->_audioUnit;
 }
 
+// MARK: Filter如何和AudioGraph关联起来呢?
 - (void)setupWithAudioController:(AEAudioController *)audioController {
     
     _audioGraph = audioController.audioGraph;
     
+    // 1. 添加Node
     // Create an instance of the audio unit
     OSStatus result;
     if ( !AECheckOSStatus(result=AUGraphAddNode(_audioGraph, &_componentDescription, &_node), "AUGraphAddNode") ||
@@ -80,11 +87,13 @@ AudioUnit AEAudioUnitFilterGetAudioUnit(__unsafe_unretained AEAudioUnitFilter * 
         return;
     }
     
-    // Set max frames per slice for screen-off state
+    // 2. Set max frames per slice for screen-off state
     UInt32 maxFPS = 4096;
     AECheckOSStatus(result=AudioUnitSetProperty(_audioUnit, kAudioUnitProperty_MaximumFramesPerSlice, kAudioUnitScope_Global, 0, &maxFPS, sizeof(maxFPS)), "kAudioUnitProperty_MaximumFramesPerSlice");
     
-    // Try to set the output audio description
+    // 3. Try to set the output audio description
+    //   设置输出的 AudioDescription
+    //   如果设置失败，则添加 _outConvertUnit
     AudioStreamBasicDescription audioDescription = audioController.audioDescription;
     result = AudioUnitSetProperty(_audioUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0, &audioDescription, sizeof(AudioStreamBasicDescription));
     if ( result == kAudioUnitErr_FormatNotSupported ) {
@@ -126,7 +135,10 @@ AudioUnit AEAudioUnitFilterGetAudioUnit(__unsafe_unretained AEAudioUnitFilter * 
         }
     }
     
-    // Try to set the input audio description
+    //
+    // 4. Try to set the input audio description
+    //    设置输入格式
+    //    如果失败，则添加Convert
     audioDescription = audioController.audioDescription;
     
     if ( !_useDefaultInputFormatWorkaround ) {
@@ -217,6 +229,7 @@ AudioUnit AEAudioUnitFilterGetAudioUnit(__unsafe_unretained AEAudioUnitFilter * 
     
     if ( _preInitializeBlock ) _preInitializeBlock(_audioUnit);
 
+    // 初始化AudioUnit
     AECheckOSStatus(AudioUnitInitialize(_audioUnit), "AudioUnitInitialize");
     
     if ( _inConverterUnit ) {
@@ -279,14 +292,18 @@ AudioUnit AEAudioUnitFilterGetAudioUnit(__unsafe_unretained AEAudioUnitFilter * 
     }
 }
 
+// 如何执行Callback动作呢?
 static OSStatus filterCallback(__unsafe_unretained AEAudioUnitFilter *THIS,
                                __unsafe_unretained AEAudioController *audioController,
                                AEAudioFilterProducer producer,
                                void                     *producerToken,
-                               const AudioTimeStamp     *time,
+                               
+                               const AudioTimeStamp     *time, // 目标数据
                                UInt32                    frames,
                                AudioBufferList          *audio) {
     
+    // 递归调用，跳过当前Filter，直接调用前一个Fitler的Producer函数
+    // 如果当前
     if ( !THIS->_audioUnit ) {
         THIS->_currentProducer(producerToken, audio, &frames);
         return noErr;
@@ -305,6 +322,7 @@ static OSStatus filterCallback(__unsafe_unretained AEAudioUnitFilter *THIS,
         if ( THIS->_wasBypassed ) AudioUnitReset (THIS->_audioUnit, kAudioUnitScope_Global, 0);
         
         // Render the AudioUnit.
+        // 从前一个AudioUnit拉取数据
         AECheckOSStatus(AudioUnitRender(THIS->_outConverterUnit ? THIS->_outConverterUnit : THIS->_audioUnit, &flags, time, 0, frames, audio), "AudioUnitRender");
     }
     

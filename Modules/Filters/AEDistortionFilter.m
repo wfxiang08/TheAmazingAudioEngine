@@ -10,9 +10,12 @@
 
 @implementation AEDistortionFilter
 
+// 统一使用Apple的Effect框架
 - (instancetype)init {
     return [super initWithComponentDescription:(AudioComponentDescription) {
-        kAudioUnitType_Effect, kAudioUnitSubType_Distortion, kAudioUnitManufacturer_Apple
+        kAudioUnitType_Effect,
+        kAudioUnitSubType_Distortion,
+        kAudioUnitManufacturer_Apple
     }];
 }
 

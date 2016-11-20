@@ -30,8 +30,9 @@ extern "C" {
 #import <Foundation/Foundation.h>
 #import "AEAudioController.h"
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////    
 /*!
- * Memory buffer player
+ * Memory buffer player 这个Buffer可以如何使用呢?
  *
  *  This class allows you to play a buffer containing audio, either as one-off samples, or looped.
  *  It can load any audio file format supported by iOS.

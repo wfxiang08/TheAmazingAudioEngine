@@ -38,7 +38,7 @@
 //
 //  3. This notice may not be removed or altered from any source distribution.
 //
-
+// 牛逼的实现
 #ifndef TPCircularBuffer_h
 #define TPCircularBuffer_h
 

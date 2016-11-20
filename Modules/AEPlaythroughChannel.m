@@ -33,6 +33,7 @@ static const int kAudioBufferLength = 16384;
 static const int kSkipThreshold = 2;
 static const int kAudiobusReceiverPortConnectedToSelfChanged;
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 @interface AEPlaythroughChannel () {
     TPCircularBuffer _buffer;
     BOOL _audiobusConnectedToSelf;
@@ -40,6 +41,7 @@ static const int kAudiobusReceiverPortConnectedToSelfChanged;
 @property (nonatomic, weak) AEAudioController *audioController;
 @end
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 @implementation AEPlaythroughChannel
 
 +(NSSet *)keyPathsForValuesAffectingAudioDescription {
@@ -52,6 +54,8 @@ static const int kAudiobusReceiverPortConnectedToSelfChanged;
 
 - (id)init {
     if ( !(self = [super init]) ) return nil;
+    
+    // 为什么使用 TPCircularBuffer ?
     TPCircularBufferInit(&_buffer, kAudioBufferLength);
     _volume = 1.0;
     return self;
@@ -103,15 +107,22 @@ static OSStatus renderCallback(__unsafe_unretained AEPlaythroughChannel *THIS,
                                const AudioTimeStamp     *time,
                                UInt32                    frames,
                                AudioBufferList          *audio) {
+    
+    // 1. 从Buffer中读取数据, 直到成功
     while ( 1 ) {
         // Discard any buffers with an incompatible format, in the event of a format change
+        // 检查nextBuffer是否OK
         AudioBufferList *nextBuffer = TPCircularBufferNextBufferList(&THIS->_buffer, NULL);
         if ( !nextBuffer ) break;
         if ( nextBuffer->mNumberBuffers == audio->mNumberBuffers ) break;
+        
+        // 消费无效的数据
         TPCircularBufferConsumeNextBufferList(&THIS->_buffer);
     }
     
+    // 2.
     UInt32 fillCount = TPCircularBufferPeek(&THIS->_buffer, NULL, AEAudioControllerAudioDescription(audioController));
+    
     if ( fillCount > frames+kSkipThreshold ) {
         UInt32 skip = fillCount - frames;
         TPCircularBufferDequeueBufferListFrames(&THIS->_buffer,
@@ -121,6 +132,7 @@ static OSStatus renderCallback(__unsafe_unretained AEPlaythroughChannel *THIS,
                                                 AEAudioControllerAudioDescription(audioController));
     }
     
+    // 从: buffer中将数据写入audio
     TPCircularBufferDequeueBufferListFrames(&THIS->_buffer,
                                             &frames,
                                             audio,
@@ -130,6 +142,7 @@ static OSStatus renderCallback(__unsafe_unretained AEPlaythroughChannel *THIS,
     return noErr;
 }
 
+// MARK: 作为Channel的标志性函数
 -(AEAudioRenderCallback)renderCallback {
     return renderCallback;
 }

@@ -59,6 +59,7 @@ extern "C" {
 - (id)initWithComponentDescription:(AudioComponentDescription)audioComponentDescription
                 preInitializeBlock:(void(^)(AudioUnit audioUnit))preInitializeBlock;
 
+// 不是成员函数，有点点像静态函数
 /*!
  * Retrieve audio unit reference
  *

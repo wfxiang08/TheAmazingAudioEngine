@@ -12,7 +12,9 @@
 
 - (instancetype)init {
     return [super initWithComponentDescription:(AudioComponentDescription) {
-        kAudioUnitType_Effect, kAudioUnitSubType_DynamicsProcessor, kAudioUnitManufacturer_Apple
+        kAudioUnitType_Effect,
+        kAudioUnitSubType_DynamicsProcessor,
+        kAudioUnitManufacturer_Apple
     }];
 }
 

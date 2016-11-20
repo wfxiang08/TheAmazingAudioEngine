@@ -30,10 +30,12 @@ extern "C" {
 #import <Foundation/Foundation.h>
 #import "TheAmazingAudioEngine.h"
 
+// 最核心的是pull数据，不管是什么Block，给要求，最终返回数据
 typedef void (^AEBlockChannelBlock)(const AudioTimeStamp     *time,
                                     UInt32                    frames,
                                     AudioBufferList          *audio);
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*!
  * Block channel: Utility class to allow use of a block to generate audio
  */

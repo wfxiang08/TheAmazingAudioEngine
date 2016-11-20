@@ -30,6 +30,7 @@ extern "C" {
 #import <Foundation/Foundation.h>
 #import "AEAudioController.h"
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /*!
  * Audio Unit Channel
  *
@@ -68,6 +69,7 @@ extern "C" {
  * @param channel The channel
  * @returns Audio unit reference
  */
+// 普通的函数，只是位置放在: AEAudioUnitChannel 内而已
 AudioUnit AEAudioUnitChannelGetAudioUnit(__unsafe_unretained AEAudioUnitChannel * channel);
 
 /*!

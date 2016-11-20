@@ -29,8 +29,10 @@
 @interface AEAudioUnitChannel () {
     AudioComponentDescription _componentDescription;
     AUGraph _audioGraph;
+    
     AUNode _node;
     AudioUnit _audioUnit;
+    
     AUNode _converterNode;
     AudioUnit _converterUnit;
 }
@@ -38,6 +40,7 @@
 @property (nonatomic, strong) NSMutableDictionary * savedParameters;
 @end
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 @implementation AEAudioUnitChannel
 @synthesize audioGraphNode = _node;
 
@@ -71,6 +74,7 @@ AudioUnit AEAudioUnitChannelGetAudioUnit(__unsafe_unretained AEAudioUnitChannel 
     _audioGraph = audioController.audioGraph;
     
     // Create an instance of the audio unit
+    // 1. 添加Node & 添加 NodeInfo
     OSStatus result;
     if ( !AECheckOSStatus(result=AUGraphAddNode(_audioGraph, &_componentDescription, &_node), "AUGraphAddNode") ||
         !AECheckOSStatus(result=AUGraphNodeInfo(_audioGraph, _node, NULL, &_audioUnit), "AUGraphNodeInfo") ) {
@@ -79,21 +83,30 @@ AudioUnit AEAudioUnitChannelGetAudioUnit(__unsafe_unretained AEAudioUnitChannel 
         return;
     }
     
-    // Set max frames per slice for screen-off state
+    // 2. Set max frames per slice for screen-off state
     UInt32 maxFPS = 4096;
-    AECheckOSStatus(result=AudioUnitSetProperty(_audioUnit, kAudioUnitProperty_MaximumFramesPerSlice, kAudioUnitScope_Global, 0, &maxFPS, sizeof(maxFPS)), "kAudioUnitProperty_MaximumFramesPerSlice");
+    AECheckOSStatus(result=AudioUnitSetProperty(_audioUnit, kAudioUnitProperty_MaximumFramesPerSlice,
+                                                kAudioUnitScope_Global, 0, &maxFPS, sizeof(maxFPS)), "kAudioUnitProperty_MaximumFramesPerSlice");
     
-    // Try to set the output audio description
+    // 3. Try to set the output audio description
     AudioStreamBasicDescription audioDescription = audioController.audioDescription;
-    result = AudioUnitSetProperty(_audioUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0, &audioDescription, sizeof(AudioStreamBasicDescription));
+    // 设置输出的格式
+    result = AudioUnitSetProperty(_audioUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0,
+                                  &audioDescription, sizeof(AudioStreamBasicDescription));
+
     if ( result == kAudioUnitErr_FormatNotSupported ) {
         // The audio description isn't supported. Assign modified default audio description, and create an audio converter.
+        // 如果格式不支持？
         AudioStreamBasicDescription defaultAudioDescription;
         UInt32 size = sizeof(defaultAudioDescription);
         AudioUnitGetProperty(_audioUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0, &defaultAudioDescription, &size);
         defaultAudioDescription.mSampleRate = audioDescription.mSampleRate;
+        
         AEAudioStreamBasicDescriptionSetChannelsPerFrame(&defaultAudioDescription, audioDescription.mChannelsPerFrame);
-        if ( !AECheckOSStatus(result=AudioUnitSetProperty(_audioUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0, &defaultAudioDescription, size), "AudioUnitSetProperty") ) {
+        
+        // 修改: _audioUnit 的输出采样率
+        if ( !AECheckOSStatus(result=AudioUnitSetProperty(_audioUnit, kAudioUnitProperty_StreamFormat,
+                                    kAudioUnitScope_Output, 0, &defaultAudioDescription, size), "AudioUnitSetProperty") ) {
             AUGraphRemoveNode(_audioGraph, _node);
             _node = 0;
             _audioUnit = NULL;
@@ -101,7 +114,13 @@ AudioUnit AEAudioUnitChannelGetAudioUnit(__unsafe_unretained AEAudioUnitChannel 
             return;
         }
         
-        AudioComponentDescription audioConverterDescription = AEAudioComponentDescriptionMake(kAudioUnitManufacturer_Apple, kAudioUnitType_FormatConverter, kAudioUnitSubType_AUConverter);
+        AudioComponentDescription audioConverterDescription = AEAudioComponentDescriptionMake(kAudioUnitManufacturer_Apple,
+                                    kAudioUnitType_FormatConverter, kAudioUnitSubType_AUConverter);
+        
+        // 添加: _converterUnit
+        //      kAudioUnitProperty_StreamFormat audioDescription
+        //      kAudioUnitProperty_MaximumFramesPerSlice
+        //      _audioUnit --> _converterUnit --> 输出(audioDescription)
         if ( !AECheckOSStatus(result=AUGraphAddNode(_audioGraph, &audioConverterDescription, &_converterNode), "AUGraphAddNode") ||
             !AECheckOSStatus(result=AUGraphNodeInfo(_audioGraph, _converterNode, NULL, &_converterUnit), "AUGraphNodeInfo") ||
             !AECheckOSStatus(result=AudioUnitSetProperty(_converterUnit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 0, &audioDescription, sizeof(AudioStreamBasicDescription)), "AudioUnitSetProperty(kAudioUnitProperty_StreamFormat)") ||
@@ -111,6 +130,8 @@ AudioUnit AEAudioUnitChannelGetAudioUnit(__unsafe_unretained AEAudioUnitChannel 
             .sourceOutputNumber = 0,
             .destInputNumber = 0
         }, sizeof(AudioUnitConnection)), "kAudioUnitProperty_MakeConnection") ) {
+            
+            // 添加converter失败，删除_node
             AUGraphRemoveNode(_audioGraph, _node);
             _node = 0;
             _audioUnit = NULL;
@@ -137,16 +158,18 @@ AudioUnit AEAudioUnitChannelGetAudioUnit(__unsafe_unretained AEAudioUnitChannel 
         }
     }
     
+    // 初始化之前的回调
     if ( _preInitializeBlock ) _preInitializeBlock(_audioUnit);
 
+    // 初始化?
     AECheckOSStatus(AudioUnitInitialize(_audioUnit), "AudioUnitInitialize");
-    
     if ( _converterUnit ) {
         AECheckOSStatus(AudioUnitInitialize(_converterUnit), "AudioUnitInitialize");
     }
 }
 
 - (void)teardown {
+    // audioUnit内存自动管理
     if ( _node ) {
         AUGraphRemoveNode(_audioGraph, _node);
         _node = 0;
@@ -198,10 +221,14 @@ static OSStatus renderCallback(__unsafe_unretained AEAudioUnitChannel *THIS,
                                UInt32                    frames,
                                AudioBufferList          *audio) {
     
+    // 当前的Channel如何使用呢?
+    // 直接返回是什么结果呢?
     if ( !THIS->_audioUnit ) {
         return noErr;
     }
     
+    // 如果有: _converterUnit, 则从 _converterUnit 读取数据
+    // 如果没有，则从: _audioUnit 读取数据
     AudioUnitRenderActionFlags flags = 0;
     AECheckOSStatus(AudioUnitRender(THIS->_converterUnit ? THIS->_converterUnit : THIS->_audioUnit, &flags, time, 0, frames, audio), "AudioUnitRender");
     return noErr;

@@ -192,9 +192,12 @@ typedef struct __channel_t {
  * Channel group
  */
 typedef struct _channel_group_t {
+    // 一个MixerNode
     AEChannelRef        channel;
     AUNode              mixerNode;
     AudioUnit           mixerAudioUnit;
+    
+    // 多个输入Node
     AEChannelRef        channels[kMaximumChannelsPerGroup];
     int                 channelCount;
     AUNode              converterNode;
@@ -218,8 +221,10 @@ typedef struct _channel_group_t {
 
 @interface AEAudioController () {
     AUGraph             _audioGraph;
+    //
     AUNode              _ioNode;
     AudioUnit           _ioAudioUnit;
+    
     BOOL                _started;
     BOOL                _interrupted;
     BOOL                _hasSystemError;
@@ -579,6 +584,7 @@ static OSStatus topRenderNotifyCallback(void *inRefCon, AudioUnitRenderActionFla
     return noErr;
 }
 
+#pragma mark - 输入控制
 static void serviceAudioInput(__unsafe_unretained AEAudioController * THIS, const AudioTimeStamp *outputBusTimeStamp, const AudioTimeStamp *inputBusTimeStamp, UInt32 inNumberFrames) {
     
     if ( !THIS->_inputAudioBufferList ) {
@@ -659,6 +665,7 @@ static void serviceAudioInput(__unsafe_unretained AEAudioController * THIS, cons
         }
         
 #if TARGET_OS_IPHONE
+        // MeasureMode: 不用考虑
         if ( THIS->_recordingThroughDeviceMicrophone && THIS->_useMeasurementMode && THIS->_boostBuiltInMicGainInMeasurementMode
                 && THIS->_inputAudioFloatConverter && THIS->_inputAudioScratchBufferList->mNumberBuffers == THIS->_rawInputAudioDescription.mChannelsPerFrame ) {
             // Boost input volume
@@ -725,26 +732,40 @@ static void serviceAudioInput(__unsafe_unretained AEAudioController * THIS, cons
 #ifdef DEBUG
 
 // Performance monitoring in debug mode
-static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags, const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber, UInt32 inNumberFrames, AudioBufferList *ioData) {
+// MARK性能监控
+static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderActionFlags *ioActionFlags,
+                                           const AudioTimeStamp *inTimeStamp, UInt32 inBusNumber,
+                                           UInt32 inNumberFrames, AudioBufferList *ioData) {
     
     __unsafe_unretained AEAudioController * THIS = (__bridge AEAudioController*)inRefCon;
     
     if ( inBusNumber == 0 && *ioActionFlags & kAudioUnitRenderAction_PreRender ) {
         // Remember the time we started rendering
-        if ( !THIS->_firstRenderTime ) THIS->_firstRenderTime = AECurrentTimeInHostTicks();
+        if ( !THIS->_firstRenderTime ) {
+            THIS->_firstRenderTime = AECurrentTimeInHostTicks();
+        }
+        
         THIS->_renderStartTime[0] = AECurrentTimeInHostTicks();
         
     } else if ( inBusNumber == 0 && *ioActionFlags & kAudioUnitRenderAction_PostRender ) {
         // Calculate total render duration
         uint64_t renderEndTime = AECurrentTimeInHostTicks();
+        // 总共的Render时间
         THIS->_renderDuration[0] = renderEndTime - THIS->_renderStartTime[MIN(1, inBusNumber)];
+        
         
         if ( THIS->_renderDuration[0] && (!THIS->_inputEnabled || THIS->_renderDuration[1]) ) {
             // Got render duration for all buses
             uint64_t duration = THIS->_renderDuration[0] + THIS->_renderDuration[1];
+            
+            // 重置数据
             THIS->_renderDuration[0] = THIS->_renderDuration[1] = THIS->_renderStartTime[0] = THIS->_renderStartTime[1] = 0;
+            
             // Warn if total render takes longer than 50% of buffer duration (gives us a bit of headroom)
             NSTimeInterval threshold = THIS->_currentBufferDuration * 0.5;
+            
+            
+            // 满足一定的条件，则打印Warning
             if ( duration >= AEHostTicksFromSeconds(threshold)
                     && (renderEndTime-THIS->_firstRenderTime) > AEHostTicksFromSeconds(10.0)
                     && (renderEndTime-THIS->_lastReportTime) > AEHostTicksFromSeconds(30.0) ) {
@@ -805,6 +826,7 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
     }
     
     // These devices aren't fast enough to do voice processing effectively
+    // 检查platform
     NSArray *badDevices = @[@"iPhone1,1", @"iPhone1,2", @"iPhone2,1", @"iPod1,1", @"iPod2,1", @"iPod3,1"];
     return ![badDevices containsObject:platform];
 }
@@ -819,14 +841,17 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
                                             | (enableInput ? AEAudioControllerOptionEnableInput : 0)];
 }
 
-- (id)initWithAudioDescription:(AudioStreamBasicDescription)audioDescription inputEnabled:(BOOL)enableInput useVoiceProcessing:(BOOL)useVoiceProcessing {
+- (id)initWithAudioDescription:(AudioStreamBasicDescription)audioDescription
+                  inputEnabled:(BOOL)enableInput
+            useVoiceProcessing:(BOOL)useVoiceProcessing {
     return [self initWithAudioDescription:audioDescription
                                   options:AEAudioControllerOptionDefaults
                                             | (enableInput ? AEAudioControllerOptionEnableInput : 0)
                                             | (useVoiceProcessing ? AEAudioControllerOptionUseVoiceProcessing : 0)];
 }
 
-- (id)initWithAudioDescription:(AudioStreamBasicDescription)audioDescription inputEnabled:(BOOL)enableInput useVoiceProcessing:(BOOL)useVoiceProcessing outputEnabled:(BOOL)enableOutput {
+- (id)initWithAudioDescription:(AudioStreamBasicDescription)audioDescription inputEnabled:(BOOL)enableInput
+            useVoiceProcessing:(BOOL)useVoiceProcessing outputEnabled:(BOOL)enableOutput {
     return [self initWithAudioDescription:audioDescription options:
         enableInput?           AEAudioControllerOptionEnableInput:0|
         useVoiceProcessing?    AEAudioControllerOptionUseVoiceProcessing:0|
@@ -850,14 +875,26 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
     BOOL enableOutput           = options & AEAudioControllerOptionEnableOutput;
     
 #if TARGET_OS_IPHONE
+    // AudioSession的选择:
+    //  AVAudioSessionCategoryPlayAndRecord
+    //  AVAudioSessionCategoryRecord
+    //  AVAudioSessionCategoryPlayback
     _audioSessionCategory = enableInput ? (enableOutput ? AVAudioSessionCategoryPlayAndRecord : AVAudioSessionCategoryRecord) : AVAudioSessionCategoryPlayback;
+    
+    // 和其他Apps Mixing 是什么需求?
     _allowMixingWithOtherApps = options & AEAudioControllerOptionAllowMixingWithOtherApps;
+    
     _enableBluetoothInput = options & AEAudioControllerOptionEnableBluetoothInput;
     _voiceProcessingEnabled = options & AEAudioControllerOptionUseVoiceProcessing;
+    
+    // MeasureMode，尽量避免使用
     _avoidMeasurementModeForBuiltInSpeaker = YES;
     _boostBuiltInMicGainInMeasurementMode = YES;
+    
+    // 这个如何处理呢?
     _automaticLatencyManagement = YES;
 #endif
+
     _audioDescription = audioDescription;
     _inputEnabled = enableInput;
     _outputEnabled = enableOutput;
@@ -865,16 +902,21 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
     _useHardwareSampleRate = options & AEAudioControllerOptionUseHardwareSampleRate;
     _inputMode = AEInputModeFixedAudioFormat;
     _voiceProcessingOnlyForSpeakerAndMicrophone = YES;
+
     _inputTable = (input_table_t *)calloc(sizeof(input_table_t), 1);
     _inputTable->count = 1;
     _inputTable->entries = (input_entry_t*)calloc(sizeof(input_entry_t), 1);
     
 #if TARGET_OS_IPHONE
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationWillEnterForeground:) name:UIApplicationWillEnterForegroundNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(applicationWillEnterForeground:)
+                                                 name:UIApplicationWillEnterForegroundNotification object:nil];
 #endif
     
     if ( ABConnectionsChangedNotification ) {
-        [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(audiobusConnectionsChanged:) name:ABConnectionsChangedNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(audiobusConnectionsChanged:)
+                                                     name:ABConnectionsChangedNotification object:nil];
     }
 
     _messageQueue = [[AEAudioControllerMessageQueue alloc] initWithMessageBufferLength:kMessageBufferLength];
@@ -882,7 +924,9 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
 
 #if TARGET_OS_IPHONE
     // Register for notifications
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(interruptionNotification:) name:AVAudioSessionInterruptionNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(interruptionNotification:)
+                                                 name:AVAudioSessionInterruptionNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(audioRouteChangeNotification:) name:AVAudioSessionRouteChangeNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(mediaServiceResetNotification:) name:AVAudioSessionMediaServicesWereResetNotification object:nil];
     
@@ -1032,6 +1076,7 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
     return [self start:error recoveringFromErrors:YES];
 }
 
+// 如何开始呢?
 -(BOOL)start:(NSError**)error recoveringFromErrors:(BOOL)recoverFromErrors {
     OSStatus status;
     
@@ -1044,12 +1089,14 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
     }
     
 #if TARGET_OS_IPHONE
+    // 激活AudioSession的设置?
     AVAudioSession *audioSession = [AVAudioSession sharedInstance];
     
     if ( ![audioSession setActive:YES error:error] ) {
         return NO;
     }
     
+    // Latency的处理
     NSTimeInterval bufferDuration = audioSession.IOBufferDuration;
     if ( _currentBufferDuration != bufferDuration ) self.currentBufferDuration = bufferDuration;
     
@@ -1074,6 +1121,7 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
     __audioThread = NULL;
     
     @synchronized ( self ) {
+        // 启动: AudioGraph
         status = AUGraphStart(_audioGraph);
 #if !TARGET_OS_IPHONE
         if (_inputEnabled) {
@@ -1104,6 +1152,7 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
         if ( [audioSession respondsToSelector:@selector(requestRecordPermission:)] ) {
             [audioSession requestRecordPermission:^(BOOL granted) {
                 dispatch_async(dispatch_get_main_queue(), ^{
+                    // 如果处理权限问题
                     if ( granted ) {
                         [self updateInputDeviceStatus];
                     } else {
@@ -1134,7 +1183,7 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
 
 - (void)stopInternal {
     NSLog(@"TAAE: Stopping Engine");
-    
+    // Stop Graph
     AECheckOSStatus(AUGraphStop(_audioGraph), "AUGraphStop");
 #if !TARGET_OS_IPHONE
     if ( _inputEnabled ) {
@@ -1142,6 +1191,7 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
     }
 #endif
     
+    // Stop Output Unit
     if ( self.running ) {
         // Ensure top IO unit is stopped (AUGraphStop may fail to stop it)
         AECheckOSStatus(AudioOutputUnitStop(_ioAudioUnit), "AudioOutputUnitStop");
@@ -1150,6 +1200,8 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
 #if TARGET_OS_IPHONE
     if ( !_interrupted ) {
         NSError *error = nil;
+        // AVAuditionSession的管理原则?
+        //
         if ( ![((AVAudioSession*)[AVAudioSession sharedInstance]) setActive:NO error:&error] ) {
             NSLog(@"TAAE: Couldn't deactivate audio session: %@", error);
         }
@@ -1171,7 +1223,9 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
     [self removeChannels:channels];
     
     // Add to group's channel array
+    // 遍历每一个Channel
     for ( id<AEAudioPlayable> channel in channels ) {
+        // 每个Channel最多能处理100个
         if ( group->channelCount == kMaximumChannelsPerGroup ) {
             NSLog(@"TAAE: Warning: Channel limit reached");
             break;
@@ -1181,6 +1235,7 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
             [channel setupWithAudioController:self];
         }
         
+        // Channel的属性改变
         for ( NSString *property in @[@"volume", @"pan", @"channelIsPlaying", @"channelIsMuted", @"audioDescription"] ) {
             [(NSObject*)channel addObserver:self forKeyPath:property options:0 context:kChannelPropertyChanged];
         }
@@ -1200,6 +1255,7 @@ static OSStatus ioUnitRenderNotifyCallback(void *inRefCon, AudioUnitRenderAction
         memset(&channelElement->timeStamp, 0, sizeof(channelElement->timeStamp));
         channelElement->audioController = (__bridge void*)self;
         
+        // 将: channelElement 添加到group中
         [self performAsynchronousMessageExchangeWithBlock:^{
             group->channels[group->channelCount++] = channelElement;
         } responseBlock:nil];
@@ -1955,7 +2011,10 @@ BOOL AECurrentThreadIsAudioThread(void) {
     options |= _enableBluetoothInput ? AVAudioSessionCategoryOptionAllowBluetooth : 0;
 #endif
     
-    if ( [_audioSessionCategory isEqualToString:AVAudioSessionCategoryPlayAndRecord] || [_audioSessionCategory isEqualToString:AVAudioSessionCategoryPlayback] ) {
+    // 如果当前的Session需要Play, 那么是否支持和其他的Audio Mixing呢?
+    // 例如: 用StarMaker来听音乐，同时支持地图导航等
+    if ( [_audioSessionCategory isEqualToString:AVAudioSessionCategoryPlayAndRecord]
+            || [_audioSessionCategory isEqualToString:AVAudioSessionCategoryPlayback] ) {
         options |= _allowMixingWithOtherApps ? AVAudioSessionCategoryOptionMixWithOthers : 0;
     }
     
@@ -2632,6 +2691,7 @@ static void audioUnitStreamFormatChanged(void *inRefCon, AudioUnit inUnit, Audio
 
 #ifdef DEBUG
     // Add a render notify to the top audio unit, for the purposes of performance profiling
+    // 用于性能监控
     AECheckOSStatus(AudioUnitAddRenderNotify(_ioAudioUnit, &ioUnitRenderNotifyCallback, (__bridge void*)self), "AudioUnitAddRenderNotify");
 #endif
     
@@ -4237,7 +4297,7 @@ static void * firstUpstreamAudiobusSenderPort(AEChannelRef channel) {
 @end
 
 #pragma mark -
-
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 @implementation AEAudioControllerProxy
 - (id)initWithAudioController:(AEAudioController *)audioController {
     _audioController = audioController;
@@ -4247,6 +4307,7 @@ static void * firstUpstreamAudiobusSenderPort(AEChannelRef channel) {
     return [_audioController methodSignatureForSelector:selector];
 }
 - (void)forwardInvocation:(NSInvocation *)invocation {
+    // Proxy的实现
     [invocation setTarget:_audioController];
     [invocation invoke];
 }

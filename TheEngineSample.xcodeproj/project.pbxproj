@@ -78,6 +78,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		35A921781DD5980600F68154 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 4C7C67EC16F1605A00721E60 /* TheAmazingAudioEngine.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = 17BB5B401BECD101007A2892;
+			remoteInfo = "TheAmazingAudioEngine tvOS";
+		};
 		4C7C67F016F1605A00721E60 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 4C7C67EC16F1605A00721E60 /* TheAmazingAudioEngine.xcodeproj */;
@@ -330,6 +337,7 @@
 			children = (
 				4C7C67F116F1605A00721E60 /* libTheAmazingAudioEngine.a */,
 				7A8D22F01B72AF250054D2B2 /* libTheAmazingAudioEngine OS X.a */,
+				35A921791DD5980600F68154 /* libTheAmazingAudioEngine tvOS.a */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -447,6 +455,9 @@
 				LastUpgradeCheck = 0700;
 				ORGANIZATIONNAME = "A Tasty Pixel";
 				TargetAttributes = {
+					4C0C24841599FADD00D23E13 = {
+						DevelopmentTeam = KFSKA2NQKM;
+					};
 					7A8D22F41B72AF5C0054D2B2 = {
 						CreatedOnToolsVersion = 6.4;
 					};
@@ -478,6 +489,13 @@
 /* End PBXProject section */
 
 /* Begin PBXReferenceProxy section */
+		35A921791DD5980600F68154 /* libTheAmazingAudioEngine tvOS.a */ = {
+			isa = PBXReferenceProxy;
+			fileType = archive.ar;
+			path = "libTheAmazingAudioEngine tvOS.a";
+			remoteRef = 35A921781DD5980600F68154 /* PBXContainerItemProxy */;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
 		4C7C67F116F1605A00721E60 /* libTheAmazingAudioEngine.a */ = {
 			isa = PBXReferenceProxy;
 			fileType = archive.ar;
@@ -685,6 +703,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				DEVELOPMENT_TEAM = KFSKA2NQKM;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "TheEngineSample/iOS/TheEngineSample-Prefix.pch";
 				HEADER_SEARCH_PATHS = TheAmazingAudioEngine;
@@ -701,6 +720,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				DEVELOPMENT_TEAM = KFSKA2NQKM;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "TheEngineSample/iOS/TheEngineSample-Prefix.pch";
 				HEADER_SEARCH_PATHS = TheAmazingAudioEngine;

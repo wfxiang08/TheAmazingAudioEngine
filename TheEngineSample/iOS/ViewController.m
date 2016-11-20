@@ -15,6 +15,9 @@
 #import "AERecorder.h"
 #import "AEReverbFilter.h"
 #import <QuartzCore/QuartzCore.h>
+#import <AudioToolbox/AudioToolbox.h>
+#import <CoreMedia/CoreMedia.h>
+#import <AVFoundation/AVFoundation.h>
 
 static const int kInputChannelsChangedContext;
 
@@ -681,6 +684,31 @@ static const int kInputChannelsChangedContext;
 }
 
 - (void)play:(id)sender {
+    
+    AVAudioSession *audioSession = [AVAudioSession sharedInstance];
+    
+    NSError* error;
+//    [audioSession setMode:AVAudioSessionModeVideoRecording error: &error];
+    if (error) {
+        NSLog(@"ERR: %@", error);
+    }
+    [audioSession setActive:YES error:&error];
+    if (error) {
+        NSLog(@"ERR: %@", error);
+    }
+//    // 在录制的时候都开启
+//    [audioSession setPreferredIOBufferDuration:SMAudioPreferredIOBufferDuration error:nil];
+    float _IOBufferDuration = [audioSession IOBufferDuration];
+    
+    NSLog(@"Hardware Latency --> Input: %.3fms, Output: %.3fms, IOBuffer: %.3fms, Mode: %@, Category: %@",
+          [audioSession inputLatency] * 1000,
+          [audioSession outputLatency] * 1000,
+          _IOBufferDuration * 1000,
+          audioSession.mode,
+          audioSession.category
+          );
+    
+    return;
     if ( _player ) {
         [_audioController removeChannels:@[_player]];
         self.player = nil;

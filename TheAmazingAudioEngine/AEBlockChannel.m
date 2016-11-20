@@ -25,12 +25,18 @@
 
 #import "AEBlockChannel.h"
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 @interface AEBlockChannel ()
 @property (nonatomic, copy) AEBlockChannelBlock block;
 @end
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 @implementation AEBlockChannel
 @synthesize block = _block;
+
++ (AEBlockChannel*)channelWithBlock:(AEBlockChannelBlock)block {
+    return [[AEBlockChannel alloc] initWithBlock:block];
+}
 
 - (id)initWithBlock:(AEBlockChannelBlock)block {
     if ( !(self = [super init]) ) self = nil;
@@ -42,9 +48,6 @@
     return self;
 }
 
-+ (AEBlockChannel*)channelWithBlock:(AEBlockChannelBlock)block {
-    return [[AEBlockChannel alloc] initWithBlock:block];
-}
 
 
 static OSStatus renderCallback(__unsafe_unretained AEBlockChannel *THIS,
@@ -52,6 +55,7 @@ static OSStatus renderCallback(__unsafe_unretained AEBlockChannel *THIS,
                                const AudioTimeStamp     *time,
                                UInt32                    frames,
                                AudioBufferList          *audio) {
+    // 对于Block, 环境不重要；中啊哟的是处理: time, frames, audio的请求
     THIS->_block(time, frames, audio);
     return noErr;
 }

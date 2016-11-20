@@ -30,10 +30,15 @@ static double __hostTicksToSeconds = 0.0;
 static double __secondsToHostTicks = 0.0;
 
 AudioBufferList *AEAudioBufferListCreate(AudioStreamBasicDescription audioFormat, int frameCount) {
+    
+    // 非交织: 多个Buffers；交织: 一个Buffer
     int numberOfBuffers = audioFormat.mFormatFlags & kAudioFormatFlagIsNonInterleaved ? audioFormat.mChannelsPerFrame : 1;
+    
     int channelsPerBuffer = audioFormat.mFormatFlags & kAudioFormatFlagIsNonInterleaved ? 1 : audioFormat.mChannelsPerFrame;
     int bytesPerBuffer = audioFormat.mBytesPerFrame * frameCount;
     
+    // UInt32      mNumberBuffers;
+    // AudioBuffer mBuffers[1];
     AudioBufferList *audio = malloc(sizeof(AudioBufferList) + (numberOfBuffers-1)*sizeof(AudioBuffer));
     if ( !audio ) {
         return NULL;
@@ -50,12 +55,17 @@ AudioBufferList *AEAudioBufferListCreate(AudioStreamBasicDescription audioFormat
         } else {
             audio->mBuffers[i].mData = NULL;
         }
+        
+        // AudioBufferList 和 AudioBuffer 关系
+        // 1个AudioBuffer, 每个Buffer汇总可能存在多个Channel Interleave的数据
+        // 多个AudioBuffer, 每个Buffer的数据时独立的
         audio->mBuffers[i].mDataByteSize = bytesPerBuffer;
         audio->mBuffers[i].mNumberChannels = channelsPerBuffer;
     }
     return audio;
 }
 
+// 拷贝数据，生成一个新的AudioBufferList
 AudioBufferList *AEAudioBufferListCopy(const AudioBufferList *original) {
     AudioBufferList *audio = malloc(sizeof(AudioBufferList) + (original->mNumberBuffers-1)*sizeof(AudioBuffer));
     if ( !audio ) {
@@ -94,6 +104,7 @@ UInt32 AEAudioBufferListGetLength(const AudioBufferList *bufferList,
     return bufferList->mBuffers[0].mDataByteSize / ((audioFormat.mBitsPerChannel/8) * channelCount);
 }
 
+// 修改Buffer Length
 void AEAudioBufferListSetLength(AudioBufferList *bufferList,
                                 AudioStreamBasicDescription audioFormat,
                                 UInt32 frames) {
@@ -102,6 +113,7 @@ void AEAudioBufferListSetLength(AudioBufferList *bufferList,
     }
 }
 
+// Offset的设置
 void AEAudioBufferListOffset(AudioBufferList *bufferList,
                              AudioStreamBasicDescription audioFormat,
                              UInt32 frames) {
@@ -111,6 +123,8 @@ void AEAudioBufferListOffset(AudioBufferList *bufferList,
     }
 }
 
+// 将<offset, length>区域的数据设置为0
+// 0表示silence
 void AEAudioBufferListSilence(const AudioBufferList *bufferList,
                               AudioStreamBasicDescription audioFormat,
                               UInt32 offset,
@@ -123,6 +137,8 @@ void AEAudioBufferListSilence(const AudioBufferList *bufferList,
     }
 }
 
+// 定义常用的 AudioStreamBasicDescription
+// 通过Static方法来引用这些对象
 AudioStreamBasicDescription const AEAudioStreamBasicDescriptionNonInterleavedFloatStereo = {
     .mFormatID          = kAudioFormatLinearPCM,
     .mFormatFlags       = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked | kAudioFormatFlagIsNonInterleaved,
@@ -200,10 +216,12 @@ AudioComponentDescription AEAudioComponentDescriptionMake(OSType manufacturer, O
 void AETimeInit(void) {
     mach_timebase_info_data_t tinfo;
     mach_timebase_info(&tinfo);
+    // 获取HostTick到Seconds的转换关系
     __hostTicksToSeconds = ((double)tinfo.numer / tinfo.denom) * 1.0e-9;
     __secondsToHostTicks = 1.0 / __hostTicksToSeconds;
 }
 
+// HostTicks的计时算法
 uint64_t AECurrentTimeInHostTicks(void) {
     return mach_absolute_time();
 }
@@ -232,6 +250,7 @@ BOOL AERateLimit(void) {
         messageCount = 0;
         lastMessage = now;
     }
+    // 1s内发生次数超过10, 则报警
     if ( ++messageCount >= 10 ) {
         if ( messageCount == 10 ) {
             NSLog(@"TAAE: Suppressing some messages");
