@@ -1720,6 +1720,13 @@ NSTimeInterval AEAudioControllerOutputLatency(__unsafe_unretained AEAudioControl
  */
 AudioTimeStamp AEAudioControllerCurrentAudioTimestamp(__unsafe_unretained AEAudioController *controller);
 
+/*!
+ * Render main output into AudioBufferList.
+ * Use only while the AUGraph is not running.
+ */
+BOOL AEAudioControllerRenderMainOutput(AEAudioController *audioController, AudioTimeStamp inTimeStamp, UInt32 inNumberFrames, AudioBufferList *ioData);
+
+
 @end
 
 #ifdef __cplusplus

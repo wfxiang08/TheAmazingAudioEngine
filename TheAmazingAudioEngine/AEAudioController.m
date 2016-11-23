@@ -4234,6 +4234,28 @@ static void * firstUpstreamAudiobusSenderPort(AEChannelRef channel) {
 }
 #endif
 
+
+//typedef struct __channel_producer_arg_t {
+//    AEChannelRef channel;
+//    AudioTimeStamp timeStamp;
+//    AudioTimeStamp originalTimeStamp;
+//    AudioUnitRenderActionFlags *ioActionFlags;
+//    int nextFilterIndex;
+//} channel_producer_arg_t;
+BOOL AEAudioControllerRenderMainOutput(AEAudioController *audioController, AudioTimeStamp inTimeStamp, UInt32 inNumberFrames, AudioBufferList *ioData) {
+    channel_producer_arg_t arg = {
+        .channel = audioController->_topChannel,
+        .timeStamp = inTimeStamp,
+        .ioActionFlags = 0,
+        .nextFilterIndex = 0
+    };
+    //
+    OSStatus result = channelAudioProducer((void*)&arg, ioData, &inNumberFrames);
+    
+    // 处理topChannel的callback
+    handleCallbacksForChannel(arg.channel, &inTimeStamp, inNumberFrames, ioData);
+    return result;
+}
 @end
 
 #pragma mark -
